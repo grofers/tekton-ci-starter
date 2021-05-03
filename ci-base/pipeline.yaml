@@ -1,0 +1,80 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: ci
+spec:
+  params:
+    - name: gitrevision
+      type: string
+      description: "Commit SHA."
+    - name: gitreponame
+      type: string
+      description: "The GitHub repository name"
+  workspaces:
+    - name: local-workspace
+  serviceAccountName: tekton-triggers
+  resources:
+    - name: git-source
+      type: git
+  tasks:
+    - name: set-pending-status
+      taskRef:
+        name: set-github-status-v2
+        kind: ClusterTask
+      params:
+        - name: pipelinerun-name
+          value: $(context.pipelineRun.name)
+        - name: pipelinerun-namespace
+          value: $(context.pipelineRun.namespace)
+        - name: pipeline-name
+          value: $(context.pipeline.name)
+        - name: SHA
+          value: $(params.gitrevision)
+        - name: REPO_NAME
+          value: $(params.gitreponame)
+      workspaces:
+        - name: local-workspace
+          workspace: local-workspace
+    - name: execute-ci-task
+      runAfter: [set-pending-status]
+      taskSpec:
+        steps:
+          - name: echo
+            image: ubuntu
+            command:
+              - echo
+            args:
+              - "Hello World"
+    - name: finalize-pipeline-status
+      runAfter: [execute-ci-task]
+      workspaces:
+        - name: local-workspace
+          workspace: local-workspace
+      taskSpec:
+        workspaces:
+          - name: local-workspace
+        steps:
+          - name: finalize
+            image: 'ubuntu'
+            script: |
+              #!/usr/bin/env bash
+              echo success > /workspace/local-workspace/pipelineStatus
+  finally:
+    - name: set-final-status
+      params:
+        - name: pipelinerun-name
+          value: $(context.pipelineRun.name)
+        - name: pipelinerun-namespace
+          value: $(context.pipelineRun.namespace)
+        - name: pipeline-name
+          value: $(context.pipeline.name)
+        - name: SHA
+          value: $(params.gitrevision)
+        - name: REPO_NAME
+          value: $(params.gitreponame)
+      taskRef:
+        name: set-github-status-v2
+        kind: ClusterTask
+      workspaces:
+        - name: local-workspace
+          workspace: local-workspace

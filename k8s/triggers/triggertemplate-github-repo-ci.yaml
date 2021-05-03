@@ -1,0 +1,59 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: github-repo-ci
+  annotations:
+    triggers.tekton.dev/old-escape-quotes: "true"
+    argocd.argoproj.io/hook: Skip
+spec:
+  params:
+  - name: gitrevision
+    description: The git revision SHA
+    default: master
+  - name: gitreponame
+    description: The git repo name
+    default: NOREPO
+  - name: gitrepositoryurl
+    description: The git repository url
+  - name: pr_body
+    description: The PR body
+  - name: pr_url
+    description: The PR url
+  resourcetemplates:
+  - apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: $(tt.params.gitreponame)-ci-
+    spec:
+      params:
+        - name: gitrevision
+          value: $(tt.params.gitrevision)
+        - name: gitreponame
+          value: $(tt.params.gitreponame)
+      podTemplate:
+        tolerations:
+          - key: team
+            operator: Equal
+            value: ci
+            effect: NoSchedule
+      workspaces:
+      - name: local-workspace
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+      pipelineRef:
+        name: $(tt.params.gitreponame)-ci
+      serviceAccountName: tekton-triggers
+      resources:
+      - name: git-source
+        resourceSpec:
+          type: git
+          params:
+          - name: revision
+            value: $(tt.params.gitrevision)
+          - name: url
+            value: $(tt.params.gitrepositoryurl)

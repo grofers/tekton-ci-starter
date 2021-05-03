@@ -1,0 +1,19 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: github-ci
+spec:
+  params:
+  - name: gitrevision
+    value: $(body.pull_request.head.sha)
+  - name: gitrepositoryurl
+    value: $(body.repository.html_url)
+  - name: contenttype
+    value: $(header.Content-Type)
+  - name: gitreponame
+    value: $(body.repository.name)
+  - name: pr_url
+    value: $(body.pull_request.html_url)
+  - name: pr_body
+    value: $(body)
+    

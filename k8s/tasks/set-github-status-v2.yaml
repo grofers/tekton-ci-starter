@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: set-github-status-v2
+spec:
+  params:
+    - description: Commit SHA to set the status for.
+      name: SHA
+      type: string
+    - description: |
+        The GitHub repository owner name
+      name: REPO_OWNER
+      type: string
+    - description: |
+        The GitHub repository name
+      name: REPO_NAME
+      type: string
+    - default: github-creds
+      description: >
+        The name of the kubernetes secret that contains the GitHub token,
+        default: github-creds
+      name: GITHUB_TOKEN_SECRET_NAME
+      type: string
+    - default: password
+      description: >
+        The key within the kubernetes secret that contains the GitHub token,
+        default: token
+      name: GITHUB_TOKEN_SECRET_KEY
+      type: string
+    - name: pipelinerun-name
+      default: $(context.pipelineRun.name)
+      description: >
+        Used to update the target URL to reach pipelinerun
+    - name: pipeline-name
+      default: $(context.pipeline.name)
+      description: >
+        Used to update the label of context for the github check.
+    - name: pipelinerun-namespace
+      default: tekton-pipelines
+      description: >
+        Used to update the namespace in target URL to reach pipelinerun
+  steps:
+    - env:
+        - name: GITHUB_ACTION
+          value: update_state
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.GITHUB_TOKEN_SECRET_KEY)
+              name: $(params.GITHUB_TOKEN_SECRET_NAME)
+        - name: GITHUB_OWNER
+          value: $(params.REPO_OWNER)
+        - name: GITHUB_REPO
+          value: $(params.REPO_NAME)
+        - name: GITHUB_REF
+          value: $(params.SHA)
+      script: >
+        #!/usr/bin/env sh
+
+        set -ex
+
+        if [ ! -f /workspace/local-workspace/pipelineStatus ]; then
+          export GITHUB_STATE="pending"
+          export GITHUB_DESCRIPTION="Tekton is running"
+          touch /workspace/local-workspace/pipelineStatus
+        elif [[ $(grep success /workspace/local-workspace/pipelineStatus) ]];
+        then
+          export GITHUB_STATE="success"
+          export GITHUB_DESCRIPTION="Build successful"
+        else
+          export GITHUB_STATE="failure"
+          export GITHUB_DESCRIPTION="Build failed"
+        fi
+
+        if [ -f /workspace/local-workspace/pipelineDescription ]; then
+          export GITHUB_DESCRIPTION=`cat /workspace/local-workspace/pipelineDescription`
+        fi
+
+        export GITHUB_CONTEXT="$(params.pipeline-name)"
+        export GITHUB_TARGET_URL="<TEKTON_DASHBOARD_SERVICE_URL>/#/namespaces/$(params.pipelinerun-namespace)/pipelineruns/$(params.pipelinerun-name)"
+
+        github-status-updater
+      image: 'github-status-updater:latest'
+      name: set-github-status-v2
+  workspaces:
+    - name: local-workspace

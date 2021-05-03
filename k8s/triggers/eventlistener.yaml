@@ -1,0 +1,24 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: github-hooks
+  namespace: tekton-pipelines
+spec:
+  serviceAccountName: tekton-triggers
+  triggers:
+    - bindings:
+        - kind: TriggerBinding
+          ref: github-ci
+      interceptors:
+        - github:
+            eventTypes:
+              - pull_request
+        - cel:
+            filter: >-
+              header.match('X-GitHub-Hook-Installation-Target-Type',
+              'repository') && body.action in ['opened', 'synchronize',
+              'reopened']
+      name: github-repo-ci
+      template:
+        ref: github-repo-ci
+  
